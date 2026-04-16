@@ -17,6 +17,7 @@ import {
   Empty,
   Popconfirm,
   Avatar,
+  message,
 } from 'antd';
 import {
   PlusOutlined,
@@ -24,6 +25,8 @@ import {
   DeleteOutlined,
   CalendarOutlined,
   UnorderedListOutlined,
+  CheckCircleOutlined,
+  MoneyCollectOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { subscriptionAPI } from '../services/api';
@@ -63,12 +66,16 @@ const currencyOptions = [
 
 const Subscriptions = () => {
   const [form] = Form.useForm();
+  const [payForm] = Form.useForm();
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showPayModal, setShowPayModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [payingSubscription, setPayingSubscription] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   const fetchSubscriptions = async () => {
     try {
@@ -145,6 +152,42 @@ const Subscriptions = () => {
         title: '删除失败',
         content: err.response?.data?.error || '请稍后重试',
       });
+    }
+  };
+
+  const openPayModal = (record) => {
+    setPayingSubscription(record);
+    payForm.setFieldsValue({
+      payment_date: dayjs(),
+      amount: record.amount,
+    });
+    setShowPayModal(true);
+  };
+
+  const handlePay = async (values) => {
+    setPaying(true);
+
+    try {
+      const submitData = {
+        payment_date: values.payment_date.format('YYYY-MM-DD'),
+        amount: values.amount,
+      };
+
+      const response = await subscriptionAPI.pay(payingSubscription.id, submitData);
+      
+      if (response.data.success) {
+        message.success('标记已支付成功！下次扣费日期已自动顺延。');
+        setShowPayModal(false);
+        payForm.resetFields();
+        fetchSubscriptions();
+      }
+    } catch (err) {
+      Modal.error({
+        title: '标记支付失败',
+        content: err.response?.data?.error || '请稍后重试',
+      });
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -266,10 +309,19 @@ const Subscriptions = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 140,
+      width: 200,
       align: 'center',
       render: (_, record) => (
         <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            icon={<CheckCircleOutlined />}
+            onClick={() => openPayModal(record)}
+            style={{ color: '#52c41a' }}
+          >
+            标记已支付
+          </Button>
           <Button
             type="link"
             size="small"
@@ -542,6 +594,135 @@ const Subscriptions = () => {
             </div>
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                backgroundColor: '#f6ffed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 12,
+              }}
+            >
+              <MoneyCollectOutlined
+                style={{ color: '#52c41a', fontSize: 18 }}
+              />
+            </div>
+            <div>
+              <Text strong style={{ fontSize: 16 }}>
+                标记已支付
+              </Text>
+              <br />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                确认支付后将自动顺延下次扣费日期
+              </Text>
+            </div>
+          </div>
+        }
+        open={showPayModal}
+        onCancel={() => setShowPayModal(false)}
+        footer={null}
+        width={480}
+        centered
+      >
+        {payingSubscription && (
+          <div style={{ marginTop: 24 }}>
+            <Card
+              size="small"
+              style={{ marginBottom: 24, backgroundColor: '#fafafa' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <Avatar
+                    size={40}
+                    style={{
+                      backgroundColor: '#f0f0f0',
+                      borderRadius: 10,
+                      marginRight: 12,
+                    }}
+                    icon={<span style={{ fontSize: 18 }}>📦</span>}
+                  />
+                  <div>
+                    <Text strong style={{ fontSize: 15, display: 'block' }}>
+                      {payingSubscription.name}
+                    </Text>
+                    <Tag color={getCycleTagColor(payingSubscription.cycle_type)}>
+                      {getCycleLabel(payingSubscription.cycle_type)}
+                    </Tag>
+                  </div>
+                </div>
+                <Text strong style={{ fontSize: 20, color: '#1890ff' }}>
+                  {formatCurrency(payingSubscription.amount, payingSubscription.currency)}
+                </Text>
+              </div>
+            </Card>
+
+            <Form
+              form={payForm}
+              layout="vertical"
+              onFinish={handlePay}
+            >
+              <Form.Item
+                name="payment_date"
+                label="支付日期"
+                rules={[{ required: true, message: '请选择支付日期' }]}
+              >
+                <DatePicker
+                  style={{ width: '100%' }}
+                  size="large"
+                  placeholder="选择支付日期"
+                  suffixIcon={<CalendarOutlined />}
+                />
+              </Form.Item>
+
+              <Form.Item
+                name="amount"
+                label="实际支付金额"
+                rules={[{ required: true, message: '请输入支付金额' }]}
+              >
+                <InputNumber
+                  style={{ width: '100%' }}
+                  placeholder="0.00"
+                  min={0}
+                  step={0.01}
+                  size="large"
+                  prefix="¥"
+                />
+              </Form.Item>
+
+              <Alert
+                message="支付后系统将自动根据订阅周期顺延下次扣费日期"
+                type="info"
+                showIcon
+                style={{ marginBottom: 24 }}
+              />
+
+              <Form.Item style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                  <Button size="large" onClick={() => setShowPayModal(false)}>
+                    取消
+                  </Button>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    loading={paying}
+                    size="large"
+                    icon={<CheckCircleOutlined />}
+                  >
+                    确认已支付
+                  </Button>
+                </div>
+              </Form.Item>
+            </Form>
+          </div>
+        )}
       </Modal>
     </div>
   );

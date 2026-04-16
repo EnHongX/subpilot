@@ -5,6 +5,7 @@ import {
   UnorderedListOutlined,
   UserOutlined,
   CalendarOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 
 const { Header, Content } = Layout;
@@ -29,6 +30,12 @@ const AppLayout = () => {
       icon: <UnorderedListOutlined />,
       label: '订阅管理',
       onClick: () => navigate('/subscriptions'),
+    },
+    {
+      key: '/payment-history',
+      icon: <HistoryOutlined />,
+      label: '支付历史',
+      onClick: () => navigate('/payment-history'),
     },
   ];
 

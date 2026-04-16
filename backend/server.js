@@ -8,7 +8,11 @@ const {
   updateSubscription,
   deleteSubscription,
   getMonthlyExpenses,
-  getUpcomingSubscriptions
+  getUpcomingSubscriptions,
+  recordPayment,
+  getPaymentHistory,
+  getPaymentHistoryCount,
+  getMonthlyPaymentStats
 } = require('./database');
 
 const app = express();
@@ -123,6 +127,72 @@ app.get('/api/dashboard/upcoming', (req, res) => {
     const days = req.query.days ? parseInt(req.query.days) : 7;
     const upcoming = getUpcomingSubscriptions(days);
     res.json({ success: true, data: upcoming });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/dashboard/payment-stats', (req, res) => {
+  try {
+    const stats = getMonthlyPaymentStats();
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/subscriptions/:id/pay', (req, res) => {
+  try {
+    const subscriptionId = parseInt(req.params.id);
+    const { payment_date, amount } = req.body;
+
+    if (isNaN(subscriptionId)) {
+      return res.status(400).json({ success: false, error: 'Invalid subscription ID' });
+    }
+
+    const result = recordPayment(subscriptionId, payment_date, amount);
+    
+    if (!result.success) {
+      return res.status(404).json({ success: false, error: result.error });
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/payments', (req, res) => {
+  try {
+    const { subscription_id, start_date, end_date, page = 1, limit = 20 } = req.query;
+    
+    const options = {};
+    if (subscription_id) options.subscriptionId = parseInt(subscription_id);
+    if (start_date) options.startDate = start_date;
+    if (end_date) options.endDate = end_date;
+    
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+    
+    options.limit = limitNum;
+    options.offset = offset;
+
+    const payments = getPaymentHistory(options);
+    const total = getPaymentHistoryCount(options);
+
+    res.json({
+      success: true,
+      data: {
+        payments,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum)
+        }
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
