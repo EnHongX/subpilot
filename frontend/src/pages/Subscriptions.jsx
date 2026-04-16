@@ -27,6 +27,7 @@ import {
   UnorderedListOutlined,
   CheckCircleOutlined,
   MoneyCollectOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { subscriptionAPI } from '../services/api';
@@ -76,6 +77,8 @@ const Subscriptions = () => {
   const [payingSubscription, setPayingSubscription] = useState(null);
   const [saving, setSaving] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [sorter, setSorter] = useState({ field: 'next_charge_date', order: 'ascend' });
 
   const fetchSubscriptions = async () => {
     try {
@@ -216,6 +219,45 @@ const Subscriptions = () => {
     return colors[cycleType] || 'default';
   };
 
+  const getFilteredAndSortedSubscriptions = () => {
+    let filtered = subscriptions;
+    if (searchText) {
+      filtered = subscriptions.filter(sub => 
+        sub.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        (sub.category && sub.category.toLowerCase().includes(searchText.toLowerCase()))
+      );
+    }
+
+    if (sorter.field && sorter.order) {
+      filtered = [...filtered].sort((a, b) => {
+        let aVal = a[sorter.field];
+        let bVal = b[sorter.field];
+        
+        if (sorter.field === 'next_charge_date' || sorter.field === 'start_date') {
+          aVal = new Date(aVal).getTime();
+          bVal = new Date(bVal).getTime();
+        }
+        
+        if (sorter.order === 'ascend') {
+          return aVal > bVal ? 1 : -1;
+        } else {
+          return aVal < bVal ? 1 : -1;
+        }
+      });
+    }
+
+    return filtered;
+  };
+
+  const handleTableChange = (pagination, filters, sorter) => {
+    if (sorter.field) {
+      setSorter({
+        field: sorter.field,
+        order: sorter.order || 'ascend'
+      });
+    }
+  };
+
   const columns = [
     {
       title: '订阅名称',
@@ -223,6 +265,7 @@ const Subscriptions = () => {
       key: 'name',
       fixed: 'left',
       width: 200,
+      sorter: true,
       render: (text, record) => (
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <Avatar
@@ -253,6 +296,7 @@ const Subscriptions = () => {
       key: 'amount',
       align: 'right',
       width: 140,
+      sorter: true,
       render: (amount, record) => (
         <div style={{ textAlign: 'right' }}>
           <Text strong style={{ fontSize: 15 }}>
@@ -271,6 +315,7 @@ const Subscriptions = () => {
       key: 'cycle_type',
       align: 'center',
       width: 120,
+      sorter: true,
       render: (cycleType) => (
         <Tag color={getCycleTagColor(cycleType)}>
           {getCycleLabel(cycleType)}
@@ -282,6 +327,7 @@ const Subscriptions = () => {
       dataIndex: 'start_date',
       key: 'start_date',
       width: 140,
+      sorter: true,
       render: (date) => (
         <Text type="secondary">{formatDate(date)}</Text>
       ),
@@ -291,6 +337,8 @@ const Subscriptions = () => {
       dataIndex: 'next_charge_date',
       key: 'next_charge_date',
       width: 180,
+      sorter: true,
+      defaultSortOrder: 'ascend',
       render: (date, record) => {
         const daysUntil = getDaysUntil(date);
         return (
@@ -379,6 +427,8 @@ const Subscriptions = () => {
     );
   }
 
+  const filteredSubscriptions = getFilteredAndSortedSubscriptions();
+
   return (
     <div>
       <div
@@ -395,14 +445,24 @@ const Subscriptions = () => {
           </Title>
           <Text type="secondary">管理您的所有订阅和固定支出</Text>
         </div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={openCreateModal}
-          size="large"
-        >
-          添加订阅
-        </Button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <Input
+            placeholder="搜索订阅名称或分类"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{ width: 250 }}
+            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+            allowClear
+          />
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={openCreateModal}
+            size="large"
+          >
+            添加订阅
+          </Button>
+        </div>
       </div>
 
       {subscriptions.length === 0 ? (
@@ -444,8 +504,9 @@ const Subscriptions = () => {
         >
           <Table
             columns={columns}
-            dataSource={subscriptions}
+            dataSource={filteredSubscriptions}
             rowKey="id"
+            onChange={handleTableChange}
             pagination={{
               showTotal: (total) => `共 ${total} 条记录`,
               pageSize: 10,
