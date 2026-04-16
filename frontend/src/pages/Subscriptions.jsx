@@ -28,6 +28,9 @@ import {
   CheckCircleOutlined,
   MoneyCollectOutlined,
   SearchOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { subscriptionAPI } from '../services/api';
@@ -219,6 +222,39 @@ const Subscriptions = () => {
     return colors[cycleType] || 'default';
   };
 
+  const getStatusLabel = (status) => {
+    const labels = {
+      active: '活跃',
+      paused: '已暂停',
+      cancelled: '已取消',
+    };
+    return labels[status] || '活跃';
+  };
+
+  const getStatusTagColor = (status) => {
+    const colors = {
+      active: 'success',
+      paused: 'warning',
+      cancelled: 'default',
+    };
+    return colors[status] || 'success';
+  };
+
+  const handleStatusChange = async (id, newStatus) => {
+    try {
+      const response = await subscriptionAPI.updateStatus(id, newStatus);
+      if (response.data.success) {
+        message.success(`订阅已${newStatus === 'active' ? '恢复' : newStatus === 'paused' ? '暂停' : '取消'}`);
+        fetchSubscriptions();
+      }
+    } catch (err) {
+      Modal.error({
+        title: '操作失败',
+        content: err.response?.data?.error || '请稍后重试',
+      });
+    }
+  };
+
   const getFilteredAndSortedSubscriptions = () => {
     let filtered = subscriptions;
     if (searchText) {
@@ -333,6 +369,19 @@ const Subscriptions = () => {
       ),
     },
     {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 120,
+      align: 'center',
+      sorter: true,
+      render: (status) => (
+        <Tag color={getStatusTagColor(status)}>
+          {getStatusLabel(status)}
+        </Tag>
+      ),
+    },
+    {
       title: '下次扣费',
       dataIndex: 'next_charge_date',
       key: 'next_charge_date',
@@ -357,46 +406,127 @@ const Subscriptions = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 200,
+      width: 320,
       align: 'center',
-      render: (_, record) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<CheckCircleOutlined />}
-            onClick={() => openPayModal(record)}
-            style={{ color: '#52c41a' }}
-          >
-            标记已支付
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => openEditModal(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确认删除"
-            description="确定要删除这个订阅吗？此操作无法撤销。"
-            okText="确认删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => handleDelete(record.id)}
-          >
+      render: (_, record) => {
+        const isActive = record.status === 'active';
+        const isPaused = record.status === 'paused';
+        const isCancelled = record.status === 'cancelled';
+
+        return (
+          <Space size="small" wrap>
+            {isActive && (
+              <Button
+                type="link"
+                size="small"
+                icon={<CheckCircleOutlined />}
+                onClick={() => openPayModal(record)}
+                style={{ color: '#52c41a' }}
+              >
+                标记已支付
+              </Button>
+            )}
             <Button
               type="link"
               size="small"
-              danger
-              icon={<DeleteOutlined />}
+              icon={<EditOutlined />}
+              onClick={() => openEditModal(record)}
             >
-              删除
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            {isActive && (
+              <Popconfirm
+                title="确认暂停"
+                description="确定要暂停这个订阅吗？暂停后将不会出现在待续费和待支付列表中。"
+                okText="确认暂停"
+                cancelText="取消"
+                onConfirm={() => handleStatusChange(record.id, 'paused')}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<PauseCircleOutlined />}
+                  style={{ color: '#faad14' }}
+                >
+                  暂停
+                </Button>
+              </Popconfirm>
+            )}
+            {isPaused && (
+              <Popconfirm
+                title="确认恢复"
+                description="确定要恢复这个订阅吗？恢复后将重新出现在待续费和待支付列表中。"
+                okText="确认恢复"
+                cancelText="取消"
+                onConfirm={() => handleStatusChange(record.id, 'active')}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<PlayCircleOutlined />}
+                  style={{ color: '#52c41a' }}
+                >
+                  恢复
+                </Button>
+              </Popconfirm>
+            )}
+            {!isCancelled && (
+              <Popconfirm
+                title="确认取消"
+                description="确定要取消这个订阅吗？取消后将不会出现在待续费和待支付列表中，但仍可恢复。"
+                okText="确认取消"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => handleStatusChange(record.id, 'cancelled')}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  icon={<CloseCircleOutlined />}
+                >
+                  取消
+                </Button>
+              </Popconfirm>
+            )}
+            {isCancelled && (
+              <Popconfirm
+                title="确认恢复"
+                description="确定要恢复这个已取消的订阅吗？恢复后将重新出现在待续费和待支付列表中。"
+                okText="确认恢复"
+                cancelText="取消"
+                onConfirm={() => handleStatusChange(record.id, 'active')}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<PlayCircleOutlined />}
+                  style={{ color: '#52c41a' }}
+                >
+                  恢复
+                </Button>
+              </Popconfirm>
+            )}
+            <Popconfirm
+              title="确认删除"
+              description="确定要删除这个订阅吗？此操作无法撤销。"
+              okText="确认删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => handleDelete(record.id)}
+            >
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -513,7 +643,7 @@ const Subscriptions = () => {
               showSizeChanger: true,
               showQuickJumper: true,
             }}
-            scroll={{ x: 900 }}
+            scroll={{ x: 1300 }}
           />
         </Card>
       )}

@@ -15,10 +15,21 @@ db.exec(`
     next_charge_date TEXT,
     description TEXT,
     category TEXT,
+    status TEXT DEFAULT 'active',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )
 `);
+
+try {
+  db.exec('ALTER TABLE subscriptions ADD COLUMN status TEXT DEFAULT "active"');
+} catch (e) {
+}
+
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status)');
+} catch (e) {
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS payment_history (
@@ -110,30 +121,51 @@ const getSubscriptionById = (id) => {
 };
 
 const createSubscription = (subscription) => {
-  const { name, amount, currency, cycle_type, start_date, description, category } = subscription;
+  const { name, amount, currency, cycle_type, start_date, description, category, status } = subscription;
   const next_charge_date = calculateNextChargeDate(start_date, cycle_type);
 
   const stmt = db.prepare(`
-    INSERT INTO subscriptions (name, amount, currency, cycle_type, start_date, next_charge_date, description, category)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO subscriptions (name, amount, currency, cycle_type, start_date, next_charge_date, description, category, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const result = stmt.run(name, amount, currency || 'CNY', cycle_type, start_date, next_charge_date, description, category);
+  const result = stmt.run(name, amount, currency || 'CNY', cycle_type, start_date, next_charge_date, description, category, status || 'active');
   return getSubscriptionById(result.lastInsertRowid);
 };
 
 const updateSubscription = (id, subscription) => {
-  const { name, amount, currency, cycle_type, start_date, description, category } = subscription;
+  const { name, amount, currency, cycle_type, start_date, description, category, status } = subscription;
   const next_charge_date = calculateNextChargeDate(start_date, cycle_type);
 
   const stmt = db.prepare(`
     UPDATE subscriptions 
-    SET name = ?, amount = ?, currency = ?, cycle_type = ?, start_date = ?, next_charge_date = ?, description = ?, category = ?, updated_at = CURRENT_TIMESTAMP
+    SET name = ?, amount = ?, currency = ?, cycle_type = ?, start_date = ?, next_charge_date = ?, description = ?, category = ?, status = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `);
 
-  stmt.run(name, amount, currency || 'CNY', cycle_type, start_date, next_charge_date, description, category, id);
+  stmt.run(name, amount, currency || 'CNY', cycle_type, start_date, next_charge_date, description, category, status || 'active', id);
   return getSubscriptionById(id);
+};
+
+const updateSubscriptionStatus = (id, status) => {
+  const validStatuses = ['active', 'paused', 'cancelled'];
+  if (!validStatuses.includes(status)) {
+    return { success: false, error: 'Invalid status. Must be one of: active, paused, cancelled' };
+  }
+
+  const existing = getSubscriptionById(id);
+  if (!existing) {
+    return { success: false, error: 'Subscription not found' };
+  }
+
+  const stmt = db.prepare(`
+    UPDATE subscriptions 
+    SET status = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+
+  stmt.run(status, id);
+  return { success: true, data: getSubscriptionById(id) };
 };
 
 const deleteSubscription = (id) => {
@@ -148,13 +180,15 @@ const getMonthlyExpenses = () => {
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
 
+  const activeSubscriptions = subscriptions.filter(sub => sub.status === 'active');
+
   const currencyTotals = {
     CNY: 0,
     USD: 0,
     EUR: 0
   };
 
-  subscriptions.forEach(sub => {
+  activeSubscriptions.forEach(sub => {
     let monthlyAmount = 0;
     switch (sub.cycle_type) {
       case 'weekly':
@@ -180,7 +214,7 @@ const getMonthlyExpenses = () => {
 
   return {
     total: Math.round((currencyTotals.CNY + currencyTotals.USD + currencyTotals.EUR) * 100) / 100,
-    count: subscriptions.length,
+    count: activeSubscriptions.length,
     byCurrency: {
       CNY: Math.round(currencyTotals.CNY * 100) / 100,
       USD: Math.round(currencyTotals.USD * 100) / 100,
@@ -198,6 +232,7 @@ const getUpcomingSubscriptions = (days = 7) => {
   futureDate.setDate(futureDate.getDate() + days);
 
   const upcoming = subscriptions.filter(sub => {
+    if (sub.status !== 'active') return false;
     const nextCharge = new Date(sub.next_charge_date);
     return nextCharge >= today && nextCharge <= futureDate;
   });
@@ -388,6 +423,7 @@ const getMonthlyPaymentStats = () => {
   monthEnd.setHours(23, 59, 59, 999);
 
   const pendingSubscriptions = allSubscriptions.filter(sub => {
+    if (sub.status !== 'active') return false;
     const nextCharge = new Date(sub.next_charge_date);
     return nextCharge >= today && nextCharge <= monthEnd;
   });
@@ -445,6 +481,7 @@ module.exports = {
   getSubscriptionById,
   createSubscription,
   updateSubscription,
+  updateSubscriptionStatus,
   deleteSubscription,
   getMonthlyExpenses,
   getUpcomingSubscriptions,
