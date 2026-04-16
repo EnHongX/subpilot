@@ -21,6 +21,8 @@ const Register = () => {
       if (result.success) {
         message.success('注册成功，已自动登录');
         navigate('/');
+      } else {
+        setError(result.error || '注册失败');
       }
     } catch (err) {
       const errorMsg = err.response?.data?.error || '注册失败，请稍后重试';
