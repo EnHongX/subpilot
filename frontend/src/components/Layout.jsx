@@ -1,11 +1,35 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Layout, Menu, Avatar, Dropdown, Typography, theme } from 'antd';
+import {
+  DashboardOutlined,
+  UnorderedListOutlined,
+  UserOutlined,
+  CalendarOutlined,
+} from '@ant-design/icons';
 
-const Layout = ({ children }) => {
+const { Header, Content } = Layout;
+const { Text } = Typography;
+
+const AppLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const {
+    token: { colorBgContainer },
+  } = theme.useToken();
 
-  const navItems = [
-    { path: '/', label: '仪表盘', icon: '📊' },
-    { path: '/subscriptions', label: '订阅管理', icon: '📋' },
+  const menuItems = [
+    {
+      key: '/',
+      icon: <DashboardOutlined />,
+      label: '仪表盘',
+      onClick: () => navigate('/'),
+    },
+    {
+      key: '/subscriptions',
+      icon: <UnorderedListOutlined />,
+      label: '订阅管理',
+      onClick: () => navigate('/subscriptions'),
+    },
   ];
 
   const formatDateDisplay = () => {
@@ -17,87 +41,120 @@ const Layout = ({ children }) => {
     return `${month}月${day}日 ${weekDay}`;
   };
 
+  const userMenuItems = [
+    {
+      key: '1',
+      label: '个人设置',
+    },
+    {
+      key: '2',
+      label: '退出登录',
+      danger: true,
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <Link to="/" className="flex-shrink-0 flex items-center group">
-                <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-                  <span className="text-lg">💳</span>
-                </div>
-                <h1 className="ml-3 text-lg font-bold text-slate-800 tracking-tight">
-                  订阅管理台
-                </h1>
-              </Link>
-
-              <div className="hidden sm:ml-10 sm:flex sm:items-center sm:space-x-1">
-                {navItems.map((item) => {
-                  const isActive = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                        isActive
-                          ? 'bg-indigo-50 text-indigo-600 shadow-sm'
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
-                      }`}
-                    >
-                      <span className="mr-2 text-base">{item.icon}</span>
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header
+        style={{
+          padding: '0 24px',
+          background: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid #f0f0f0',
+          boxShadow: '0 1px 4px rgba(0, 21, 41, 0.08)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              marginRight: 48,
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 12,
+              }}
+            >
+              <span style={{ fontSize: 18 }}>💳</span>
             </div>
-
-            <div className="flex items-center">
-              <div className="hidden sm:flex items-center space-x-3">
-                <div className="flex items-center text-sm text-slate-500">
-                  <span className="mr-2">📅</span>
-                  <span>{formatDateDisplay()}</span>
-                </div>
-                <div className="w-px h-5 bg-slate-200"></div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">U</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Typography.Title
+              level={5}
+              style={{ margin: 0, fontWeight: 600, color: '#1f1f1f' }}
+            >
+              订阅管理台
+            </Typography.Title>
           </div>
+
+          <Menu
+            mode="horizontal"
+            selectedKeys={[location.pathname]}
+            items={menuItems}
+            style={{
+              borderBottom: 'none',
+              minWidth: 200,
+            }}
+          />
         </div>
 
-        <div className="sm:hidden border-t border-slate-100 bg-white">
-          <div className="flex px-2 py-2">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex-1 flex flex-col items-center justify-center py-2.5 mx-1 rounded-xl transition-all ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-600'
-                      : 'text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="text-xl mb-0.5">{item.icon}</span>
-                  <span className="text-xs font-medium">{item.label}</span>
-                </Link>
-              );
-            })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', color: '#666' }}>
+            <CalendarOutlined style={{ marginRight: 6 }} />
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              {formatDateDisplay()}
+            </Text>
           </div>
-        </div>
-      </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {children}
-      </main>
-    </div>
+          <div style={{ width: 1, height: 24, background: '#e8e8e8' }} />
+
+          <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                borderRadius: 6,
+                transition: 'background 0.2s',
+              }}
+            >
+              <Avatar
+                size={32}
+                style={{
+                  background: 'linear-gradient(135deg, #52c41a 0%, #13c2c2 100%)',
+                }}
+                icon={<UserOutlined />}
+              />
+              <Text style={{ marginLeft: 8, fontSize: 13 }}>用户</Text>
+            </div>
+          </Dropdown>
+        </div>
+      </Header>
+
+      <Content
+        style={{
+          padding: '24px 32px',
+          background: '#f5f5f5',
+          minHeight: 'calc(100vh - 64px)',
+        }}
+      >
+        <Outlet />
+      </Content>
+    </Layout>
   );
 };
 
-export default Layout;
+export default AppLayout;
