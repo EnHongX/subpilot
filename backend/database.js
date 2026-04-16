@@ -56,6 +56,36 @@ db.exec(`
   ON payment_history(payment_date)
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscription_id INTEGER NOT NULL,
+    subscription_name TEXT NOT NULL,
+    old_amount REAL NOT NULL,
+    new_amount REAL NOT NULL,
+    currency TEXT DEFAULT 'CNY',
+    effective_date TEXT NOT NULL,
+    note TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
+  )
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_price_history_subscription_id 
+  ON price_history(subscription_id)
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_price_history_created_at 
+  ON price_history(created_at)
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_price_history_effective_date 
+  ON price_history(effective_date)
+`);
+
 const calculateNextChargeDate = (startDate, cycleType) => {
   const date = new Date(startDate);
   const today = new Date();
@@ -105,18 +135,24 @@ const getEffectiveNextChargeDate = (sub) => {
 
 const getAllSubscriptions = () => {
   const subscriptions = db.prepare('SELECT * FROM subscriptions ORDER BY created_at DESC').all();
-  return subscriptions.map(sub => ({
-    ...sub,
-    next_charge_date: getEffectiveNextChargeDate(sub)
-  }));
+  return subscriptions.map(sub => {
+    const latestPriceChange = getSubscriptionLatestPriceChange(sub.id);
+    return {
+      ...sub,
+      next_charge_date: getEffectiveNextChargeDate(sub),
+      latest_price_change: latestPriceChange
+    };
+  });
 };
 
 const getSubscriptionById = (id) => {
   const sub = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(id);
   if (!sub) return null;
+  const latestPriceChange = getSubscriptionLatestPriceChange(id);
   return {
     ...sub,
-    next_charge_date: getEffectiveNextChargeDate(sub)
+    next_charge_date: getEffectiveNextChargeDate(sub),
+    latest_price_change: latestPriceChange
   };
 };
 
@@ -133,8 +169,19 @@ const createSubscription = (subscription) => {
   return getSubscriptionById(result.lastInsertRowid);
 };
 
-const updateSubscription = (id, subscription) => {
+const updateSubscription = (id, subscription, options = {}) => {
   const { name, amount, currency, cycle_type, start_date, description, category, status } = subscription;
+  const { price_change_note, effective_date } = options;
+  
+  const existing = getSubscriptionById(id);
+  if (!existing) {
+    return { success: false, error: 'Subscription not found' };
+  }
+
+  const oldAmount = existing.amount;
+  const newAmount = amount;
+  const currencyChanged = currency && currency !== existing.currency;
+
   const next_charge_date = calculateNextChargeDate(start_date, cycle_type);
 
   const stmt = db.prepare(`
@@ -144,7 +191,26 @@ const updateSubscription = (id, subscription) => {
   `);
 
   stmt.run(name, amount, currency || 'CNY', cycle_type, start_date, next_charge_date, description, category, status || 'active', id);
-  return getSubscriptionById(id);
+
+  if (oldAmount !== newAmount || currencyChanged) {
+    recordPriceChange(
+      id,
+      oldAmount,
+      newAmount,
+      currency || existing.currency || 'CNY',
+      price_change_note || null,
+      effective_date || null
+    );
+  }
+
+  const updated = getSubscriptionById(id);
+  return { 
+    success: true, 
+    data: updated,
+    priceChanged: oldAmount !== newAmount || currencyChanged,
+    oldAmount,
+    newAmount
+  };
 };
 
 const updateSubscriptionStatus = (id, status) => {
@@ -473,6 +539,139 @@ const getMonthlyPaymentStats = () => {
   };
 };
 
+const recordPriceChange = (subscriptionId, oldAmount, newAmount, currency, note = null, effectiveDate = null) => {
+  const subscription = getSubscriptionById(subscriptionId);
+  if (!subscription) {
+    return { success: false, error: 'Subscription not found' };
+  }
+
+  if (oldAmount === newAmount) {
+    return { success: true, skipped: true, message: 'Price has not changed' };
+  }
+
+  const today = new Date();
+  const actualEffectiveDate = effectiveDate || today.toISOString().split('T')[0];
+
+  const stmt = db.prepare(`
+    INSERT INTO price_history (
+      subscription_id, subscription_name, old_amount, new_amount, 
+      currency, effective_date, note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  stmt.run(
+    subscriptionId,
+    subscription.name,
+    oldAmount,
+    newAmount,
+    currency || subscription.currency || 'CNY',
+    actualEffectiveDate,
+    note
+  );
+
+  return { success: true };
+};
+
+const getPriceHistoryBySubscriptionId = (subscriptionId) => {
+  const history = db.prepare(`
+    SELECT * FROM price_history 
+    WHERE subscription_id = ? 
+    ORDER BY effective_date DESC, created_at DESC
+  `).all(subscriptionId);
+  return history;
+};
+
+const getPriceHistory = (options = {}) => {
+  const { subscriptionId, startDate, endDate, limit, offset } = options;
+  
+  let query = `SELECT * FROM price_history WHERE 1=1`;
+  const params = [];
+
+  if (subscriptionId) {
+    query += ` AND subscription_id = ?`;
+    params.push(subscriptionId);
+  }
+
+  if (startDate) {
+    query += ` AND effective_date >= ?`;
+    params.push(startDate);
+  }
+
+  if (endDate) {
+    query += ` AND effective_date <= ?`;
+    params.push(endDate);
+  }
+
+  query += ` ORDER BY effective_date DESC, created_at DESC`;
+
+  if (limit) {
+    query += ` LIMIT ?`;
+    params.push(limit);
+  }
+
+  if (offset) {
+    query += ` OFFSET ?`;
+    params.push(offset);
+  }
+
+  const history = db.prepare(query).all(...params);
+  return history;
+};
+
+const getPriceHistoryCount = (options = {}) => {
+  const { subscriptionId, startDate, endDate } = options;
+  
+  let query = `SELECT COUNT(*) as total FROM price_history WHERE 1=1`;
+  const params = [];
+
+  if (subscriptionId) {
+    query += ` AND subscription_id = ?`;
+    params.push(subscriptionId);
+  }
+
+  if (startDate) {
+    query += ` AND effective_date >= ?`;
+    params.push(startDate);
+  }
+
+  if (endDate) {
+    query += ` AND effective_date <= ?`;
+    params.push(endDate);
+  }
+
+  const result = db.prepare(query).get(...params);
+  return result.total;
+};
+
+const getRecentPriceIncreases = (days = 30, limit = 20) => {
+  const today = new Date();
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - days);
+  const startDateStr = startDate.toISOString().split('T')[0];
+
+  const increases = db.prepare(`
+    SELECT ph.*, s.status 
+    FROM price_history ph
+    LEFT JOIN subscriptions s ON ph.subscription_id = s.id
+    WHERE ph.new_amount > ph.old_amount 
+    AND ph.effective_date >= ?
+    ORDER BY ph.effective_date DESC, ph.created_at DESC
+    LIMIT ?
+  `).all(startDateStr, limit);
+
+  return increases;
+};
+
+const getSubscriptionLatestPriceChange = (subscriptionId) => {
+  const latest = db.prepare(`
+    SELECT * FROM price_history 
+    WHERE subscription_id = ? 
+    ORDER BY effective_date DESC, created_at DESC 
+    LIMIT 1
+  `).get(subscriptionId);
+  return latest || null;
+};
+
 module.exports = {
   db,
   calculateNextChargeDate,
@@ -488,5 +687,11 @@ module.exports = {
   recordPayment,
   getPaymentHistory,
   getPaymentHistoryCount,
-  getMonthlyPaymentStats
+  getMonthlyPaymentStats,
+  recordPriceChange,
+  getPriceHistoryBySubscriptionId,
+  getPriceHistory,
+  getPriceHistoryCount,
+  getRecentPriceIncreases,
+  getSubscriptionLatestPriceChange
 };
