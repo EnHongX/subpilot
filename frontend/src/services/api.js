@@ -8,16 +8,6 @@ const api = axios.create({
   withCredentials: true,
 });
 
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401 && error.response.data?.needLogin) {
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
 export const authAPI = {
   register: (username, password) => 
     api.post('/auth/register', { username, password }),

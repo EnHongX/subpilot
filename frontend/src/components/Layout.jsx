@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Typography, theme, Spin, message } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Typography, theme, message } from 'antd';
 import {
   DashboardOutlined,
   UnorderedListOutlined,
@@ -17,7 +17,7 @@ const { Text } = Typography;
 const AppLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, loading } = useAuth();
+  const { user, logout } = useAuth();
   const {
     token: { colorBgContainer },
   } = theme.useToken();
@@ -75,19 +75,6 @@ const AppLayout = () => {
       danger: true,
     },
   ];
-
-  if (loading) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh' 
-      }}>
-        <Spin size="large" />
-      </div>
-    );
-  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
