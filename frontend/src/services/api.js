@@ -14,6 +14,7 @@ export const subscriptionAPI = {
   update: (id, data) => api.put(`/subscriptions/${id}`, data),
   delete: (id) => api.delete(`/subscriptions/${id}`),
   pay: (id, data) => api.post(`/subscriptions/${id}/pay`, data),
+  updateStatus: (id, status) => api.patch(`/subscriptions/${id}/status`, { status }),
 };
 
 export const dashboardAPI = {

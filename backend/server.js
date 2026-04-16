@@ -6,6 +6,7 @@ const {
   getSubscriptionById,
   createSubscription,
   updateSubscription,
+  updateSubscriptionStatus,
   deleteSubscription,
   getMonthlyExpenses,
   getUpcomingSubscriptions,
@@ -108,6 +109,26 @@ app.delete('/api/subscriptions/:id', (req, res) => {
     } else {
       res.status(500).json({ success: false, error: 'Failed to delete subscription' });
     }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.patch('/api/subscriptions/:id/status', (req, res) => {
+  try {
+    const { status } = req.body;
+    
+    if (!status) {
+      return res.status(400).json({ success: false, error: 'Status is required' });
+    }
+
+    const result = updateSubscriptionStatus(req.params.id, status);
+    
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    res.json(result);
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
