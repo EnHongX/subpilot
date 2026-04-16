@@ -78,11 +78,25 @@ const calculateNextChargeDate = (startDate, cycleType) => {
   return nextDate.toISOString().split('T')[0];
 };
 
+const getEffectiveNextChargeDate = (sub) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (sub.next_charge_date) {
+    const storedDate = new Date(sub.next_charge_date);
+    if (storedDate >= today) {
+      return sub.next_charge_date;
+    }
+  }
+
+  return calculateNextChargeDate(sub.start_date, sub.cycle_type);
+};
+
 const getAllSubscriptions = () => {
   const subscriptions = db.prepare('SELECT * FROM subscriptions ORDER BY created_at DESC').all();
   return subscriptions.map(sub => ({
     ...sub,
-    next_charge_date: calculateNextChargeDate(sub.start_date, sub.cycle_type)
+    next_charge_date: getEffectiveNextChargeDate(sub)
   }));
 };
 
@@ -91,7 +105,7 @@ const getSubscriptionById = (id) => {
   if (!sub) return null;
   return {
     ...sub,
-    next_charge_date: calculateNextChargeDate(sub.start_date, sub.cycle_type)
+    next_charge_date: getEffectiveNextChargeDate(sub)
   };
 };
 
