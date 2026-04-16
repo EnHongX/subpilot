@@ -15,12 +15,16 @@ export const subscriptionAPI = {
   delete: (id) => api.delete(`/subscriptions/${id}`),
   pay: (id, data) => api.post(`/subscriptions/${id}/pay`, data),
   updateStatus: (id, status) => api.patch(`/subscriptions/${id}/status`, { status }),
+  getPriceHistory: (id) => api.get(`/subscriptions/${id}/price-history`),
+  getLatestPriceChange: (id) => api.get(`/subscriptions/${id}/latest-price-change`),
 };
 
 export const dashboardAPI = {
   getMonthlyExpenses: () => api.get('/dashboard/monthly-expenses'),
   getUpcoming: (days = 7) => api.get(`/dashboard/upcoming?days=${days}`),
   getPaymentStats: () => api.get('/dashboard/payment-stats'),
+  getRecentPriceIncreases: (days = 30, limit = 20) => 
+    api.get(`/dashboard/recent-price-increases?days=${days}&limit=${limit}`),
 };
 
 export const paymentAPI = {
@@ -31,6 +35,17 @@ export const paymentAPI = {
     if (startDate) queryString += `&start_date=${startDate}`;
     if (endDate) queryString += `&end_date=${endDate}`;
     return api.get(`/payments${queryString}`);
+  },
+};
+
+export const priceHistoryAPI = {
+  getHistory: (params = {}) => {
+    const { subscriptionId, startDate, endDate, page = 1, limit = 20 } = params;
+    let queryString = `?page=${page}&limit=${limit}`;
+    if (subscriptionId) queryString += `&subscription_id=${subscriptionId}`;
+    if (startDate) queryString += `&start_date=${startDate}`;
+    if (endDate) queryString += `&end_date=${endDate}`;
+    return api.get(`/price-history${queryString}`);
   },
 };
 

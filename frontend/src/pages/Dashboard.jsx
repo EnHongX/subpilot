@@ -25,6 +25,7 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   HistoryOutlined,
+  RiseOutlined,
 } from '@ant-design/icons';
 import { dashboardAPI } from '../services/api';
 import {
@@ -41,16 +42,18 @@ const Dashboard = () => {
   const [monthlyExpenses, setMonthlyExpenses] = useState(null);
   const [upcomingSubscriptions, setUpcomingSubscriptions] = useState([]);
   const [paymentStats, setPaymentStats] = useState(null);
+  const [recentPriceIncreases, setRecentPriceIncreases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [expensesRes, upcomingRes, statsRes] = await Promise.all([
+        const [expensesRes, upcomingRes, statsRes, increasesRes] = await Promise.all([
           dashboardAPI.getMonthlyExpenses(),
           dashboardAPI.getUpcoming(7),
           dashboardAPI.getPaymentStats(),
+          dashboardAPI.getRecentPriceIncreases(30, 10),
         ]);
 
         if (expensesRes.data.success) {
@@ -61,6 +64,9 @@ const Dashboard = () => {
         }
         if (statsRes.data.success) {
           setPaymentStats(statsRes.data.data);
+        }
+        if (increasesRes.data.success) {
+          setRecentPriceIncreases(increasesRes.data.data);
         }
       } catch (err) {
         setError(err.message || '获取数据失败');
@@ -438,6 +444,119 @@ const Dashboard = () => {
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       {getCycleShortLabel(sub.cycle_type)}
                     </Text>
+                  </div>
+                </List.Item>
+              );
+            }}
+            style={{ padding: 0 }}
+          />
+        )}
+      </Card>
+
+      <Card
+        title={
+          <Space>
+            <RiseOutlined style={{ color: '#ff4d4f' }} />
+            <span>最近涨价订阅</span>
+            <Tag color="red" style={{ marginLeft: 8 }}>
+              近 30 天 共 {recentPriceIncreases.length} 项
+            </Tag>
+          </Space>
+        }
+        bordered={false}
+        style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)', marginTop: 24 }}
+      >
+        {recentPriceIncreases.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <div>
+                <Paragraph style={{ marginBottom: 8 }}>
+                  近 30 天没有涨价的订阅
+                </Paragraph>
+                <Button
+                  type="link"
+                  icon={<RightOutlined />}
+                  onClick={() => navigate('/subscriptions')}
+                >
+                  管理所有订阅
+                </Button>
+              </div>
+            }
+            style={{ padding: '40px 0' }}
+          />
+        ) : (
+          <List
+            dataSource={recentPriceIncreases}
+            renderItem={(item) => {
+              const changeAmount = item.new_amount - item.old_amount;
+              const changePercent = item.old_amount > 0 ? ((changeAmount / item.old_amount) * 100).toFixed(1) : 0;
+              
+              return (
+                <List.Item
+                  style={{ padding: '16px 0', borderBottom: '1px solid #f0f0f0' }}
+                >
+                  <List.Item.Meta
+                    avatar={
+                      <Avatar
+                        size={48}
+                        style={{
+                          backgroundColor: '#fff2f0',
+                          borderRadius: 12,
+                        }}
+                        icon={
+                          <span style={{ fontSize: 20, color: '#ff4d4f' }}>
+                            <RiseOutlined />
+                          </span>
+                        }
+                      />
+                    }
+                    title={
+                      <Space>
+                        <Text strong style={{ fontSize: 15 }}>
+                          {item.subscription_name}
+                        </Text>
+                        {item.status && item.status !== 'active' && (
+                          <Tag color={item.status === 'paused' ? 'warning' : 'default'}>
+                            {item.status === 'paused' ? '已暂停' : '已取消'}
+                          </Tag>
+                        )}
+                      </Space>
+                    }
+                    description={
+                      <Space>
+                        <CalendarOutlined style={{ color: '#999' }} />
+                        <Text type="secondary">
+                          生效日期: {formatDate(item.effective_date)}
+                        </Text>
+                        {item.note && (
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            备注: {item.note}
+                          </Text>
+                        )}
+                      </Space>
+                    }
+                  />
+                  <div style={{ textAlign: 'right', marginRight: 16 }}>
+                    <Space>
+                      <Text type="secondary" style={{ fontSize: 13 }}>
+                        {formatCurrency(item.old_amount, item.currency)}
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 14 }}>→</Text>
+                      <Text 
+                        strong 
+                        style={{ 
+                          fontSize: 16, 
+                          color: '#ff4d4f' 
+                        }}
+                      >
+                        {formatCurrency(item.new_amount, item.currency)}
+                      </Text>
+                    </Space>
+                    <br />
+                    <Tag color="red" style={{ marginTop: 4 }}>
+                      +{formatCurrency(changeAmount, item.currency)} (+{changePercent}%)
+                    </Tag>
                   </div>
                 </List.Item>
               );

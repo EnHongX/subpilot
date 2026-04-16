@@ -31,6 +31,8 @@ import {
   PauseCircleOutlined,
   PlayCircleOutlined,
   CloseCircleOutlined,
+  HistoryOutlined,
+  RiseOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { subscriptionAPI } from '../services/api';
@@ -82,6 +84,13 @@ const Subscriptions = () => {
   const [paying, setPaying] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [sorter, setSorter] = useState({ field: 'next_charge_date', order: 'ascend' });
+  const [originalSubscription, setOriginalSubscription] = useState(null);
+  const [showPriceHistoryModal, setShowPriceHistoryModal] = useState(false);
+  const [priceHistorySubscription, setPriceHistorySubscription] = useState(null);
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
+  const [showPriceChangeConfirm, setShowPriceChangeConfirm] = useState(false);
+  const [pendingUpdateData, setPendingUpdateData] = useState(null);
 
   const fetchSubscriptions = async () => {
     try {
@@ -109,6 +118,10 @@ const Subscriptions = () => {
 
   const openEditModal = (record) => {
     setEditingId(record.id);
+    setOriginalSubscription({
+      amount: record.amount,
+      currency: record.currency || 'CNY',
+    });
     form.setFieldsValue({
       name: record.name,
       amount: record.amount,
@@ -117,6 +130,7 @@ const Subscriptions = () => {
       start_date: dayjs(record.start_date),
       description: record.description || '',
       category: record.category || '',
+      price_change_note: '',
     });
     setShowModal(true);
   };
@@ -130,8 +144,20 @@ const Subscriptions = () => {
         start_date: values.start_date.format('YYYY-MM-DD'),
       };
 
+      if (editingId && values.price_change_note) {
+        submitData.price_change_note = values.price_change_note;
+      }
+
       if (editingId) {
-        await subscriptionAPI.update(editingId, submitData);
+        const response = await subscriptionAPI.update(editingId, submitData);
+        if (response.data.priceChanged) {
+          const oldAmount = response.data.oldAmount;
+          const newAmount = response.data.newAmount;
+          const isIncrease = newAmount > oldAmount;
+          message.success(
+            `价格已${isIncrease ? '上涨' : '下调'}: ${formatCurrency(oldAmount, values.currency)} → ${formatCurrency(newAmount, values.currency)}`
+          );
+        }
       } else {
         await subscriptionAPI.create(submitData);
       }
@@ -240,6 +266,23 @@ const Subscriptions = () => {
     return colors[status] || 'success';
   };
 
+  const openPriceHistoryModal = async (record) => {
+    setPriceHistorySubscription(record);
+    setShowPriceHistoryModal(true);
+    setPriceHistoryLoading(true);
+    
+    try {
+      const response = await subscriptionAPI.getPriceHistory(record.id);
+      if (response.data.success) {
+        setPriceHistory(response.data.data);
+      }
+    } catch (err) {
+      message.error('获取价格历史失败');
+    } finally {
+      setPriceHistoryLoading(false);
+    }
+  };
+
   const handleStatusChange = async (id, newStatus) => {
     try {
       const response = await subscriptionAPI.updateStatus(id, newStatus);
@@ -331,19 +374,35 @@ const Subscriptions = () => {
       dataIndex: 'amount',
       key: 'amount',
       align: 'right',
-      width: 140,
+      width: 160,
       sorter: true,
-      render: (amount, record) => (
-        <div style={{ textAlign: 'right' }}>
-          <Text strong style={{ fontSize: 15 }}>
-            {formatCurrency(amount, record.currency)}
-          </Text>
-          <br />
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {getCycleShortLabel(record.cycle_type)}
-          </Text>
-        </div>
-      ),
+      render: (amount, record) => {
+        const latestChange = record.latest_price_change;
+        const hasRecentIncrease = latestChange && latestChange.new_amount > latestChange.old_amount;
+        
+        return (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+              <Text strong style={{ fontSize: 15 }}>
+                {formatCurrency(amount, record.currency)}
+              </Text>
+              {hasRecentIncrease && (
+                <Tag color="red" style={{ margin: 0 }}>
+                  <RiseOutlined style={{ fontSize: 10 }} /> 涨价
+                </Tag>
+              )}
+            </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {getCycleShortLabel(record.cycle_type)}
+            </Text>
+            {hasRecentIncrease && (
+              <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+                {formatCurrency(latestChange.old_amount, latestChange.currency)} → {formatCurrency(latestChange.new_amount, latestChange.currency)}
+              </Text>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: '周期',
@@ -406,7 +465,7 @@ const Subscriptions = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 450,
+      width: 520,
       align: 'center',
       render: (_, record) => {
         const isActive = record.status === 'active';
@@ -433,6 +492,15 @@ const Subscriptions = () => {
               onClick={() => openEditModal(record)}
             >
               编辑
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              icon={<HistoryOutlined />}
+              onClick={() => openPriceHistoryModal(record)}
+              style={{ color: '#1890ff' }}
+            >
+              价格历史
             </Button>
             {isActive && (
               <Popconfirm
@@ -762,6 +830,28 @@ const Subscriptions = () => {
             />
           </Form.Item>
 
+          {editingId && (
+            <Form.Item
+              name="price_change_note"
+              label={
+                <span>
+                  价格变更备注
+                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
+                    (修改金额时填写)
+                  </Text>
+                </span>
+              }
+            >
+              <TextArea
+                rows={2}
+                placeholder="例如：服务价格调整、套餐升级等"
+                size="large"
+                showCount
+                maxLength={200}
+              />
+            </Form.Item>
+          )}
+
           <Form.Item
             style={{
               marginBottom: 0,
@@ -912,6 +1002,127 @@ const Subscriptions = () => {
                 </div>
               </Form.Item>
             </Form>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                backgroundColor: '#e6f7ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 12,
+              }}
+            >
+              <HistoryOutlined
+                style={{ color: '#1890ff', fontSize: 18 }}
+              />
+            </div>
+            <div>
+              <Text strong style={{ fontSize: 16 }}>
+                价格变更历史
+              </Text>
+              <br />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {priceHistorySubscription?.name || ''}
+              </Text>
+            </div>
+          </div>
+        }
+        open={showPriceHistoryModal}
+        onCancel={() => setShowPriceHistoryModal(false)}
+        footer={null}
+        width={640}
+        centered
+      >
+        {priceHistoryLoading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+            <Spin tip="加载中..." />
+          </div>
+        ) : priceHistory.length === 0 ? (
+          <Empty
+            description="暂无价格变更记录"
+            style={{ padding: '40px 0' }}
+          />
+        ) : (
+          <div style={{ marginTop: 24 }}>
+            <List
+              dataSource={priceHistory}
+              renderItem={(item, index) => {
+                const isIncrease = item.new_amount > item.old_amount;
+                const changeAmount = item.new_amount - item.old_amount;
+                const changePercent = item.old_amount > 0 ? ((changeAmount / item.old_amount) * 100).toFixed(1) : 0;
+                
+                return (
+                  <List.Item
+                    style={{
+                      padding: '16px 0',
+                      borderBottom: index < priceHistory.length - 1 ? '1px solid #f0f0f0' : 'none',
+                    }}
+                  >
+                    <List.Item.Meta
+                      avatar={
+                        <Avatar
+                          size={48}
+                          style={{
+                            backgroundColor: isIncrease ? '#fff2f0' : '#f6ffed',
+                            borderRadius: 12,
+                          }}
+                          icon={
+                            <span style={{ fontSize: 20, color: isIncrease ? '#ff4d4f' : '#52c41a' }}>
+                              {isIncrease ? <RiseOutlined /> : <span>↓</span>}
+                            </span>
+                          }
+                        />
+                      }
+                      title={
+                        <Space>
+                          <Text strong style={{ fontSize: 15 }}>
+                            {formatCurrency(item.old_amount, item.currency)}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 14 }}>→</Text>
+                          <Text 
+                            strong 
+                            style={{ 
+                              fontSize: 15, 
+                              color: isIncrease ? '#ff4d4f' : '#52c41a' 
+                            }}
+                          >
+                            {formatCurrency(item.new_amount, item.currency)}
+                          </Text>
+                          <Tag color={isIncrease ? 'red' : 'green'}>
+                            {isIncrease ? '+' : ''}{formatCurrency(changeAmount, item.currency)}
+                            ({isIncrease ? '+' : ''}{changePercent}%)
+                          </Tag>
+                        </Space>
+                      }
+                      description={
+                        <Space direction="vertical" size={4} style={{ display: 'flex' }}>
+                          <Space>
+                            <CalendarOutlined style={{ color: '#999' }} />
+                            <Text type="secondary">
+                              生效日期: {formatDate(item.effective_date)}
+                            </Text>
+                          </Space>
+                          {item.note && (
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              备注: {item.note}
+                            </Text>
+                          )}
+                        </Space>
+                      }
+                    />
+                  </List.Item>
+                );
+              }}
+            />
           </div>
         )}
       </Modal>

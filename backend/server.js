@@ -13,7 +13,13 @@ const {
   recordPayment,
   getPaymentHistory,
   getPaymentHistoryCount,
-  getMonthlyPaymentStats
+  getMonthlyPaymentStats,
+  recordPriceChange,
+  getPriceHistoryBySubscriptionId,
+  getPriceHistory,
+  getPriceHistoryCount,
+  getRecentPriceIncreases,
+  getSubscriptionLatestPriceChange
 } = require('./database');
 
 const app = express();
@@ -75,7 +81,7 @@ app.post('/api/subscriptions', (req, res) => {
 
 app.put('/api/subscriptions/:id', (req, res) => {
   try {
-    const { name, amount, cycle_type, start_date } = req.body;
+    const { name, amount, cycle_type, start_date, price_change_note, effective_date } = req.body;
     
     if (!name || amount === undefined || !cycle_type || !start_date) {
       return res.status(400).json({ 
@@ -89,8 +95,22 @@ app.put('/api/subscriptions/:id', (req, res) => {
       return res.status(404).json({ success: false, error: 'Subscription not found' });
     }
 
-    const subscription = updateSubscription(req.params.id, req.body);
-    res.json({ success: true, data: subscription });
+    const result = updateSubscription(req.params.id, req.body, {
+      price_change_note,
+      effective_date
+    });
+    
+    if (!result.success) {
+      return res.status(404).json({ success: false, error: result.error });
+    }
+
+    res.json({ 
+      success: true, 
+      data: result.data,
+      priceChanged: result.priceChanged,
+      oldAmount: result.oldAmount,
+      newAmount: result.newAmount
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -213,6 +233,104 @@ app.get('/api/payments', (req, res) => {
           totalPages: Math.ceil(total / limitNum)
         }
       }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/subscriptions/:id/price-history', (req, res) => {
+  try {
+    const subscriptionId = parseInt(req.params.id);
+    if (isNaN(subscriptionId)) {
+      return res.status(400).json({ success: false, error: 'Invalid subscription ID' });
+    }
+
+    const existing = getSubscriptionById(subscriptionId);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Subscription not found' });
+    }
+
+    const history = getPriceHistoryBySubscriptionId(subscriptionId);
+    
+    res.json({
+      success: true,
+      data: history
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/price-history', (req, res) => {
+  try {
+    const { subscription_id, start_date, end_date, page = 1, limit = 20 } = req.query;
+    
+    const options = {};
+    if (subscription_id) options.subscriptionId = parseInt(subscription_id);
+    if (start_date) options.startDate = start_date;
+    if (end_date) options.endDate = end_date;
+    
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+    
+    options.limit = limitNum;
+    options.offset = offset;
+
+    const history = getPriceHistory(options);
+    const total = getPriceHistoryCount(options);
+
+    res.json({
+      success: true,
+      data: {
+        history,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum)
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/dashboard/recent-price-increases', (req, res) => {
+  try {
+    const days = req.query.days ? parseInt(req.query.days) : 30;
+    const limit = req.query.limit ? parseInt(req.query.limit) : 20;
+    
+    const increases = getRecentPriceIncreases(days, limit);
+    
+    res.json({
+      success: true,
+      data: increases
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/subscriptions/:id/latest-price-change', (req, res) => {
+  try {
+    const subscriptionId = parseInt(req.params.id);
+    if (isNaN(subscriptionId)) {
+      return res.status(400).json({ success: false, error: 'Invalid subscription ID' });
+    }
+
+    const existing = getSubscriptionById(subscriptionId);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Subscription not found' });
+    }
+
+    const latest = getSubscriptionLatestPriceChange(subscriptionId);
+    
+    res.json({
+      success: true,
+      data: latest
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
