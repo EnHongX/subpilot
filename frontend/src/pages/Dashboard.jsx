@@ -95,15 +95,20 @@ const Dashboard = () => {
 
   const renderByCurrency = (byCurrency) => {
     if (!byCurrency) return null;
-    const currencies = Object.entries(byCurrency).filter(([_, amount]) => amount > 0);
+    const currencies = [
+      { code: 'CNY', amount: byCurrency.CNY || 0 },
+      { code: 'USD', amount: byCurrency.USD || 0 },
+      { code: 'EUR', amount: byCurrency.EUR || 0 },
+    ].filter(c => c.amount > 0);
+    
     if (currencies.length === 0) return <Text type="secondary" style={{ fontSize: 12 }}>暂无支出</Text>;
     
     return (
-      <div style={{ marginTop: 4 }}>
-        {currencies.map(([currency, amount]) => (
-          <div key={currency} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 2 }}>
-            <Text type="secondary">{getCurrencyLabel(currency)}:</Text>
-            <Text strong>{formatCurrency(amount, currency)}</Text>
+      <div>
+        {currencies.map(({ code, amount }) => (
+          <div key={code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 4 }}>
+            <Text type="secondary">{getCurrencyLabel(code)}:</Text>
+            <Text strong style={{ fontSize: 14 }}>{formatCurrency(amount, code)}</Text>
           </div>
         ))}
       </div>
@@ -113,13 +118,11 @@ const Dashboard = () => {
   const statCards = [
     {
       title: '本月预计支出',
-      value: monthlyExpenses
-        ? formatCurrency(monthlyExpenses.total)
-        : '¥0.00',
       icon: <DollarOutlined />,
       color: '#1890ff',
       bgColor: '#e6f7ff',
       byCurrency: monthlyExpenses?.byCurrency,
+      isCurrencyOnly: true,
     },
     {
       title: '活跃订阅数',
@@ -139,15 +142,20 @@ const Dashboard = () => {
 
   const renderPaymentByCurrency = (byCurrency) => {
     if (!byCurrency) return null;
-    const currencies = Object.entries(byCurrency).filter(([_, data]) => data.total > 0);
+    const currencies = [
+      { code: 'CNY', ...byCurrency.CNY },
+      { code: 'USD', ...byCurrency.USD },
+      { code: 'EUR', ...byCurrency.EUR },
+    ].filter(c => c.total > 0);
+    
     if (currencies.length === 0) return <Text type="secondary" style={{ fontSize: 12 }}>暂无记录</Text>;
     
     return (
-      <div style={{ marginTop: 4 }}>
-        {currencies.map(([currency, data]) => (
-          <div key={currency} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 2 }}>
-            <Text type="secondary">{getCurrencyLabel(currency)} ({data.count}项):</Text>
-            <Text strong>{formatCurrency(data.total, currency)}</Text>
+      <div>
+        {currencies.map(({ code, total, count }) => (
+          <div key={code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 4 }}>
+            <Text type="secondary">{getCurrencyLabel(code)} ({count}项):</Text>
+            <Text strong style={{ fontSize: 14 }}>{formatCurrency(total, code)}</Text>
           </div>
         ))}
       </div>
@@ -157,22 +165,16 @@ const Dashboard = () => {
   const paymentStatCards = [
     {
       title: '本月已支付',
-      count: paymentStats?.paid?.count || 0,
-      total: paymentStats?.paid?.total || 0,
       icon: <CheckCircleOutlined />,
       color: '#52c41a',
       bgColor: '#f6ffed',
-      label: '已支付',
       byCurrency: paymentStats?.paid?.byCurrency,
     },
     {
       title: '本月待支付',
-      count: paymentStats?.pending?.count || 0,
-      total: paymentStats?.pending?.total || 0,
       icon: <HistoryOutlined />,
       color: '#fa8c16',
       bgColor: '#fff7e6',
-      label: '待支付',
       byCurrency: paymentStats?.pending?.byCurrency,
     },
   ];
@@ -262,21 +264,29 @@ const Dashboard = () => {
                     {card.icon}
                   </span>
                 </div>
-                <div>
-                  <Statistic
-                    title={
-                      <Text type="secondary" style={{ fontSize: 13 }}>
+                <div style={{ flex: 1 }}>
+                  {card.isCurrencyOnly ? (
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
                         {card.title}
                       </Text>
-                    }
-                    value={card.value}
-                    valueStyle={{
-                      fontSize: 26,
-                      fontWeight: 600,
-                      color: '#1f1f1f',
-                    }}
-                  />
-                  {card.byCurrency && renderByCurrency(card.byCurrency)}
+                      {card.byCurrency && renderByCurrency(card.byCurrency)}
+                    </div>
+                  ) : (
+                    <Statistic
+                      title={
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                          {card.title}
+                        </Text>
+                      }
+                      value={card.value}
+                      valueStyle={{
+                        fontSize: 26,
+                        fontWeight: 600,
+                        color: '#1f1f1f',
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             </Card>
@@ -329,46 +339,10 @@ const Dashboard = () => {
                     </span>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <Row gutter={[16, 0]} align="middle">
-                      <Col span={8}>
-                        <Statistic
-                          title={
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              {card.title}
-                            </Text>
-                          }
-                          value={card.count}
-                          valueStyle={{
-                            fontSize: 22,
-                            fontWeight: 600,
-                            color: card.color,
-                          }}
-                          suffix={
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              项
-                            </Text>
-                          }
-                        />
-                      </Col>
-                      <Col span={16}>
-                        <Divider type="vertical" style={{ height: 40 }} />
-                        <div style={{ display: 'inline-block', marginLeft: 16 }}>
-                          <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-                            金额
-                          </Text>
-                          <Text
-                            strong
-                            style={{
-                              fontSize: 18,
-                              color: card.color,
-                            }}
-                          >
-                            {formatCurrency(card.total)}
-                          </Text>
-                          {card.byCurrency && renderPaymentByCurrency(card.byCurrency)}
-                        </div>
-                      </Col>
-                    </Row>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                      {card.title}
+                    </Text>
+                    {card.byCurrency && renderPaymentByCurrency(card.byCurrency)}
                   </div>
                 </div>
               </Card>
