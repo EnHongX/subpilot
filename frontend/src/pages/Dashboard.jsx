@@ -14,6 +14,7 @@ import {
   Statistic,
   Empty,
   Space,
+  Divider,
 } from 'antd';
 import {
   DollarOutlined,
@@ -22,6 +23,8 @@ import {
   PlusOutlined,
   RightOutlined,
   CalendarOutlined,
+  CheckCircleOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { dashboardAPI } from '../services/api';
 import {
@@ -37,15 +40,17 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [monthlyExpenses, setMonthlyExpenses] = useState(null);
   const [upcomingSubscriptions, setUpcomingSubscriptions] = useState([]);
+  const [paymentStats, setPaymentStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [expensesRes, upcomingRes] = await Promise.all([
+        const [expensesRes, upcomingRes, statsRes] = await Promise.all([
           dashboardAPI.getMonthlyExpenses(),
           dashboardAPI.getUpcoming(7),
+          dashboardAPI.getPaymentStats(),
         ]);
 
         if (expensesRes.data.success) {
@@ -53,6 +58,9 @@ const Dashboard = () => {
         }
         if (upcomingRes.data.success) {
           setUpcomingSubscriptions(upcomingRes.data.data);
+        }
+        if (statsRes.data.success) {
+          setPaymentStats(statsRes.data.data);
         }
       } catch (err) {
         setError(err.message || '获取数据失败');
@@ -99,6 +107,27 @@ const Dashboard = () => {
       icon: <ClockCircleOutlined />,
       color: '#fa8c16',
       bgColor: '#fff7e6',
+    },
+  ];
+
+  const paymentStatCards = [
+    {
+      title: '本月已支付',
+      count: paymentStats?.paid?.count || 0,
+      total: paymentStats?.paid?.total || 0,
+      icon: <CheckCircleOutlined />,
+      color: '#52c41a',
+      bgColor: '#f6ffed',
+      label: '已支付',
+    },
+    {
+      title: '本月待支付',
+      count: paymentStats?.pending?.count || 0,
+      total: paymentStats?.pending?.total || 0,
+      icon: <HistoryOutlined />,
+      color: '#fa8c16',
+      bgColor: '#fff7e6',
+      label: '待支付',
     },
   ];
 
@@ -207,6 +236,98 @@ const Dashboard = () => {
           </Col>
         ))}
       </Row>
+
+      <Card
+        bordered={false}
+        style={{
+          borderRadius: 12,
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+          marginBottom: 24,
+        }}
+      >
+        <Title level={5} style={{ margin: 0, marginBottom: 20 }}>
+          本月支付统计
+        </Title>
+        <Row gutter={[24, 0]}>
+          {paymentStatCards.map((card, index) => (
+            <Col xs={24} sm={12} key={index}>
+              <Card
+                size="small"
+                style={{
+                  borderRadius: 8,
+                  border: `1px solid ${card.color}20`,
+                  backgroundColor: card.bgColor,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 10,
+                      backgroundColor: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 16,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 20,
+                        color: card.color,
+                      }}
+                    >
+                      {card.icon}
+                    </span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <Row gutter={[16, 0]} align="middle">
+                      <Col span={8}>
+                        <Statistic
+                          title={
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {card.title}
+                            </Text>
+                          }
+                          value={card.count}
+                          valueStyle={{
+                            fontSize: 22,
+                            fontWeight: 600,
+                            color: card.color,
+                          }}
+                          suffix={
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              项
+                            </Text>
+                          }
+                        />
+                      </Col>
+                      <Col span={16}>
+                        <Divider type="vertical" style={{ height: 40 }} />
+                        <div style={{ display: 'inline-block', marginLeft: 16 }}>
+                          <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                            金额
+                          </Text>
+                          <Text
+                            strong
+                            style={{
+                              fontSize: 18,
+                              color: card.color,
+                            }}
+                          >
+                            {formatCurrency(card.total)}
+                          </Text>
+                        </div>
+                      </Col>
+                    </Row>
+                  </div>
+                </div>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      </Card>
 
       <Card
         title={
