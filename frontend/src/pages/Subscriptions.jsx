@@ -268,16 +268,18 @@ const Subscriptions = () => {
 
   const openPriceHistoryModal = async (record) => {
     setPriceHistorySubscription(record);
-    setShowPriceHistoryModal(true);
+    setPriceHistory([]);
     setPriceHistoryLoading(true);
+    setShowPriceHistoryModal(true);
     
     try {
       const response = await subscriptionAPI.getPriceHistory(record.id);
       if (response.data.success) {
-        setPriceHistory(response.data.data);
+        setPriceHistory(response.data.data || []);
       }
     } catch (err) {
       message.error('获取价格历史失败');
+      setPriceHistory([]);
     } finally {
       setPriceHistoryLoading(false);
     }
@@ -1053,76 +1055,71 @@ const Subscriptions = () => {
           />
         ) : (
           <div style={{ marginTop: 24 }}>
-            <List
-              dataSource={priceHistory}
-              renderItem={(item, index) => {
-                const isIncrease = item.new_amount > item.old_amount;
-                const changeAmount = item.new_amount - item.old_amount;
-                const changePercent = item.old_amount > 0 ? ((changeAmount / item.old_amount) * 100).toFixed(1) : 0;
-                
-                return (
-                  <List.Item
-                    style={{
-                      padding: '16px 0',
-                      borderBottom: index < priceHistory.length - 1 ? '1px solid #f0f0f0' : 'none',
-                    }}
-                  >
-                    <List.Item.Meta
-                      avatar={
-                        <Avatar
-                          size={48}
-                          style={{
-                            backgroundColor: isIncrease ? '#fff2f0' : '#f6ffed',
-                            borderRadius: 12,
+            {priceHistory.map((item, index) => {
+              const isIncrease = item.new_amount > item.old_amount;
+              const changeAmount = item.new_amount - item.old_amount;
+              const changePercent = item.old_amount > 0 ? ((changeAmount / item.old_amount) * 100).toFixed(1) : 0;
+              
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: '16px 0',
+                    borderBottom: index < priceHistory.length - 1 ? '1px solid #f0f0f0' : 'none',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+                    <Avatar
+                      size={48}
+                      style={{
+                        backgroundColor: isIncrease ? '#fff2f0' : '#f6ffed',
+                        borderRadius: 12,
+                        marginRight: 16,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{ fontSize: 20, color: isIncrease ? '#ff4d4f' : '#52c41a' }}>
+                        {isIncrease ? <RiseOutlined /> : '↓'}
+                      </span>
+                    </Avatar>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                        <Text strong style={{ fontSize: 15 }}>
+                          {formatCurrency(item.old_amount, item.currency)}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 14 }}>→</Text>
+                        <Text 
+                          strong 
+                          style={{ 
+                            fontSize: 15, 
+                            color: isIncrease ? '#ff4d4f' : '#52c41a' 
                           }}
-                          icon={
-                            <span style={{ fontSize: 20, color: isIncrease ? '#ff4d4f' : '#52c41a' }}>
-                              {isIncrease ? <RiseOutlined /> : <span>↓</span>}
-                            </span>
-                          }
-                        />
-                      }
-                      title={
-                        <Space>
-                          <Text strong style={{ fontSize: 15 }}>
-                            {formatCurrency(item.old_amount, item.currency)}
+                        >
+                          {formatCurrency(item.new_amount, item.currency)}
+                        </Text>
+                        <Tag color={isIncrease ? 'red' : 'green'}>
+                          {isIncrease ? '+' : ''}{formatCurrency(changeAmount, item.currency)}
+                          ({isIncrease ? '+' : ''}{changePercent}%)
+                        </Tag>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <CalendarOutlined style={{ color: '#999', fontSize: 12 }} />
+                          <Text type="secondary" style={{ fontSize: 13 }}>
+                            生效日期: {formatDate(item.effective_date)}
                           </Text>
-                          <Text type="secondary" style={{ fontSize: 14 }}>→</Text>
-                          <Text 
-                            strong 
-                            style={{ 
-                              fontSize: 15, 
-                              color: isIncrease ? '#ff4d4f' : '#52c41a' 
-                            }}
-                          >
-                            {formatCurrency(item.new_amount, item.currency)}
+                        </div>
+                        {item.note && (
+                          <Text type="secondary" style={{ fontSize: 13 }}>
+                            备注: {item.note}
                           </Text>
-                          <Tag color={isIncrease ? 'red' : 'green'}>
-                            {isIncrease ? '+' : ''}{formatCurrency(changeAmount, item.currency)}
-                            ({isIncrease ? '+' : ''}{changePercent}%)
-                          </Tag>
-                        </Space>
-                      }
-                      description={
-                        <Space direction="vertical" size={4} style={{ display: 'flex' }}>
-                          <Space>
-                            <CalendarOutlined style={{ color: '#999' }} />
-                            <Text type="secondary">
-                              生效日期: {formatDate(item.effective_date)}
-                            </Text>
-                          </Space>
-                          {item.note && (
-                            <Text type="secondary" style={{ fontSize: 13 }}>
-                              备注: {item.note}
-                            </Text>
-                          )}
-                        </Space>
-                      }
-                    />
-                  </List.Item>
-                );
-              }}
-            />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </Modal>

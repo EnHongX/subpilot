@@ -86,6 +86,72 @@ db.exec(`
   ON price_history(effective_date)
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    nickname TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+} catch (e) {
+}
+
+const createUser = (username, password, nickname = null) => {
+  const stmt = db.prepare(`
+    INSERT INTO users (username, password, nickname)
+    VALUES (?, ?, ?)
+  `);
+  const result = stmt.run(username, password, nickname || username);
+  return getUserById(result.lastInsertRowid);
+};
+
+const getUserById = (id) => {
+  return db.prepare('SELECT id, username, nickname, created_at FROM users WHERE id = ?').get(id);
+};
+
+const getUserByUsername = (username) => {
+  return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+};
+
+const updateUser = (id, { nickname, password }) => {
+  const existing = getUserById(id);
+  if (!existing) {
+    return { success: false, error: 'User not found' };
+  }
+
+  const updates = [];
+  const values = [];
+
+  if (nickname !== undefined) {
+    updates.push('nickname = ?');
+    values.push(nickname);
+  }
+  if (password !== undefined) {
+    updates.push('password = ?');
+    values.push(password);
+  }
+
+  if (updates.length === 0) {
+    return { success: true, data: existing };
+  }
+
+  updates.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(id);
+
+  const stmt = db.prepare(`
+    UPDATE users SET ${updates.join(', ')} WHERE id = ?
+  `);
+  stmt.run(...values);
+
+  return { success: true, data: getUserById(id) };
+};
+
 const calculateNextChargeDate = (startDate, cycleType) => {
   const date = new Date(startDate);
   const today = new Date();
@@ -693,5 +759,9 @@ module.exports = {
   getPriceHistory,
   getPriceHistoryCount,
   getRecentPriceIncreases,
-  getSubscriptionLatestPriceChange
+  getSubscriptionLatestPriceChange,
+  createUser,
+  getUserById,
+  getUserByUsername,
+  updateUser
 };

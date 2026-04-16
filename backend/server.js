@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
 const {
   getAllSubscriptions,
   getSubscriptionById,
@@ -19,20 +21,191 @@ const {
   getPriceHistory,
   getPriceHistoryCount,
   getRecentPriceIncreases,
-  getSubscriptionLatestPriceChange
+  getSubscriptionLatestPriceChange,
+  createUser,
+  getUserById,
+  getUserByUsername,
+  updateUser
 } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const SESSION_SECRET = process.env.SESSION_SECRET || 'subpilot-secret-key-2024';
 
-app.use(cors());
+app.use(cookieParser());
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    sameSite: 'lax'
+  }
+}));
+
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(bodyParser.json());
+
+const validateInput = (value, min, max, fieldName) => {
+  if (!value || typeof value !== 'string') {
+    return { valid: false, message: `${fieldName}不能为空` };
+  }
+  const trimmed = value.trim();
+  if (trimmed.length < min || trimmed.length > max) {
+    return { valid: false, message: `${fieldName}长度必须为${min}-${max}位` };
+  }
+  return { valid: true, value: trimmed };
+};
+
+const requireAuth = (req, res, next) => {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ success: false, error: '未登录或登录已过期', needLogin: true });
+  }
+  next();
+};
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Subscription manager API is running' });
 });
 
-app.get('/api/subscriptions', (req, res) => {
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    const usernameCheck = validateInput(username, 2, 8, '用户名');
+    if (!usernameCheck.valid) {
+      return res.status(400).json({ success: false, error: usernameCheck.message });
+    }
+
+    const passwordCheck = validateInput(password, 2, 8, '密码');
+    if (!passwordCheck.valid) {
+      return res.status(400).json({ success: false, error: passwordCheck.message });
+    }
+
+    const existingUser = getUserByUsername(usernameCheck.value);
+    if (existingUser) {
+      return res.status(400).json({ success: false, error: '用户名已存在' });
+    }
+
+    const user = createUser(usernameCheck.value, passwordCheck.value);
+    
+    req.session.userId = user.id;
+    req.session.user = user;
+
+    res.status(201).json({ 
+      success: true, 
+      message: '注册成功',
+      data: user 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ success: false, error: '用户名和密码不能为空' });
+    }
+
+    const user = getUserByUsername(username.trim());
+    if (!user) {
+      return res.status(401).json({ success: false, error: '用户名或密码错误' });
+    }
+
+    if (user.password !== password.trim()) {
+      return res.status(401).json({ success: false, error: '用户名或密码错误' });
+    }
+
+    const safeUser = {
+      id: user.id,
+      username: user.username,
+      nickname: user.nickname
+    };
+
+    req.session.userId = user.id;
+    req.session.user = safeUser;
+
+    res.json({ 
+      success: true, 
+      message: '登录成功',
+      data: safeUser 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: '退出失败' });
+    }
+    res.clearCookie('connect.sid');
+    res.json({ success: true, message: '已退出登录' });
+  });
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  try {
+    const user = getUserById(req.session.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: '用户不存在' });
+    }
+    res.json({ success: true, data: user });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/auth/profile', requireAuth, (req, res) => {
+  try {
+    const { nickname, password } = req.body;
+    const updates = {};
+
+    if (nickname !== undefined) {
+      const nicknameCheck = validateInput(nickname, 2, 8, '昵称');
+      if (!nicknameCheck.valid) {
+        return res.status(400).json({ success: false, error: nicknameCheck.message });
+      }
+      updates.nickname = nicknameCheck.value;
+    }
+
+    if (password !== undefined) {
+      const passwordCheck = validateInput(password, 2, 8, '密码');
+      if (!passwordCheck.valid) {
+        return res.status(400).json({ success: false, error: passwordCheck.message });
+      }
+      updates.password = passwordCheck.value;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, error: '没有需要更新的内容' });
+    }
+
+    const result = updateUser(req.session.userId, updates);
+    if (!result.success) {
+      return res.status(404).json({ success: false, error: result.error });
+    }
+
+    res.json({ 
+      success: true, 
+      message: '更新成功',
+      data: result.data 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/subscriptions', requireAuth, (req, res) => {
   try {
     const subscriptions = getAllSubscriptions();
     res.json({ success: true, data: subscriptions });
@@ -41,7 +214,7 @@ app.get('/api/subscriptions', (req, res) => {
   }
 });
 
-app.get('/api/subscriptions/:id', (req, res) => {
+app.get('/api/subscriptions/:id', requireAuth, (req, res) => {
   try {
     const subscription = getSubscriptionById(req.params.id);
     if (!subscription) {
@@ -53,7 +226,7 @@ app.get('/api/subscriptions/:id', (req, res) => {
   }
 });
 
-app.post('/api/subscriptions', (req, res) => {
+app.post('/api/subscriptions', requireAuth, (req, res) => {
   try {
     const { name, amount, cycle_type, start_date } = req.body;
     
@@ -79,7 +252,7 @@ app.post('/api/subscriptions', (req, res) => {
   }
 });
 
-app.put('/api/subscriptions/:id', (req, res) => {
+app.put('/api/subscriptions/:id', requireAuth, (req, res) => {
   try {
     const { name, amount, cycle_type, start_date, price_change_note, effective_date } = req.body;
     
@@ -116,7 +289,7 @@ app.put('/api/subscriptions/:id', (req, res) => {
   }
 });
 
-app.delete('/api/subscriptions/:id', (req, res) => {
+app.delete('/api/subscriptions/:id', requireAuth, (req, res) => {
   try {
     const existing = getSubscriptionById(req.params.id);
     if (!existing) {
@@ -134,7 +307,7 @@ app.delete('/api/subscriptions/:id', (req, res) => {
   }
 });
 
-app.patch('/api/subscriptions/:id/status', (req, res) => {
+app.patch('/api/subscriptions/:id/status', requireAuth, (req, res) => {
   try {
     const { status } = req.body;
     
@@ -154,7 +327,7 @@ app.patch('/api/subscriptions/:id/status', (req, res) => {
   }
 });
 
-app.get('/api/dashboard/monthly-expenses', (req, res) => {
+app.get('/api/dashboard/monthly-expenses', requireAuth, (req, res) => {
   try {
     const expenses = getMonthlyExpenses();
     res.json({ success: true, data: expenses });
@@ -163,7 +336,7 @@ app.get('/api/dashboard/monthly-expenses', (req, res) => {
   }
 });
 
-app.get('/api/dashboard/upcoming', (req, res) => {
+app.get('/api/dashboard/upcoming', requireAuth, (req, res) => {
   try {
     const days = req.query.days ? parseInt(req.query.days) : 7;
     const upcoming = getUpcomingSubscriptions(days);
@@ -173,7 +346,7 @@ app.get('/api/dashboard/upcoming', (req, res) => {
   }
 });
 
-app.get('/api/dashboard/payment-stats', (req, res) => {
+app.get('/api/dashboard/payment-stats', requireAuth, (req, res) => {
   try {
     const stats = getMonthlyPaymentStats();
     res.json({ success: true, data: stats });
@@ -182,7 +355,7 @@ app.get('/api/dashboard/payment-stats', (req, res) => {
   }
 });
 
-app.post('/api/subscriptions/:id/pay', (req, res) => {
+app.post('/api/subscriptions/:id/pay', requireAuth, (req, res) => {
   try {
     const subscriptionId = parseInt(req.params.id);
     const { payment_date, amount } = req.body;
@@ -203,7 +376,7 @@ app.post('/api/subscriptions/:id/pay', (req, res) => {
   }
 });
 
-app.get('/api/payments', (req, res) => {
+app.get('/api/payments', requireAuth, (req, res) => {
   try {
     const { subscription_id, start_date, end_date, page = 1, limit = 20 } = req.query;
     
@@ -239,7 +412,7 @@ app.get('/api/payments', (req, res) => {
   }
 });
 
-app.get('/api/subscriptions/:id/price-history', (req, res) => {
+app.get('/api/subscriptions/:id/price-history', requireAuth, (req, res) => {
   try {
     const subscriptionId = parseInt(req.params.id);
     if (isNaN(subscriptionId)) {
@@ -262,7 +435,7 @@ app.get('/api/subscriptions/:id/price-history', (req, res) => {
   }
 });
 
-app.get('/api/price-history', (req, res) => {
+app.get('/api/price-history', requireAuth, (req, res) => {
   try {
     const { subscription_id, start_date, end_date, page = 1, limit = 20 } = req.query;
     
@@ -298,7 +471,7 @@ app.get('/api/price-history', (req, res) => {
   }
 });
 
-app.get('/api/dashboard/recent-price-increases', (req, res) => {
+app.get('/api/dashboard/recent-price-increases', requireAuth, (req, res) => {
   try {
     const days = req.query.days ? parseInt(req.query.days) : 30;
     const limit = req.query.limit ? parseInt(req.query.limit) : 20;
@@ -314,7 +487,7 @@ app.get('/api/dashboard/recent-price-increases', (req, res) => {
   }
 });
 
-app.get('/api/subscriptions/:id/latest-price-change', (req, res) => {
+app.get('/api/subscriptions/:id/latest-price-change', requireAuth, (req, res) => {
   try {
     const subscriptionId = parseInt(req.params.id);
     if (isNaN(subscriptionId)) {
