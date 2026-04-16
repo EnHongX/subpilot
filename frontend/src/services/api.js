@@ -5,7 +5,35 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401 && error.response.data?.needLogin) {
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export const authAPI = {
+  register: (username, password) => 
+    api.post('/auth/register', { username, password }),
+  
+  login: (username, password) => 
+    api.post('/auth/login', { username, password }),
+  
+  logout: () => 
+    api.post('/auth/logout'),
+  
+  getCurrentUser: () => 
+    api.get('/auth/me'),
+  
+  updateProfile: (data) => 
+    api.put('/auth/profile', data),
+};
 
 export const subscriptionAPI = {
   getAll: () => api.get('/subscriptions'),

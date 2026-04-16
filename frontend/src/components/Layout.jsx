@@ -1,12 +1,15 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Typography, theme } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Typography, theme, Spin, message } from 'antd';
 import {
   DashboardOutlined,
   UnorderedListOutlined,
   UserOutlined,
   CalendarOutlined,
   HistoryOutlined,
+  SettingOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
+import { useAuth } from '../contexts/AuthContext';
 
 const { Header, Content } = Layout;
 const { Text } = Typography;
@@ -14,9 +17,20 @@ const { Text } = Typography;
 const AppLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout, loading } = useAuth();
   const {
     token: { colorBgContainer },
   } = theme.useToken();
+
+  const handleMenuClick = async ({ key }) => {
+    if (key === 'settings') {
+      navigate('/settings');
+    } else if (key === 'logout') {
+      await logout();
+      message.success('已退出登录');
+      navigate('/login');
+    }
+  };
 
   const menuItems = [
     {
@@ -50,15 +64,30 @@ const AppLayout = () => {
 
   const userMenuItems = [
     {
-      key: '1',
+      key: 'settings',
+      icon: <SettingOutlined />,
       label: '个人设置',
     },
     {
-      key: '2',
+      key: 'logout',
+      icon: <LogoutOutlined />,
       label: '退出登录',
       danger: true,
     },
   ];
+
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh' 
+      }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -127,7 +156,10 @@ const AppLayout = () => {
 
           <div style={{ width: 1, height: 24, background: '#e8e8e8' }} />
 
-          <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+          <Dropdown 
+            menu={{ items: userMenuItems, onClick: handleMenuClick }} 
+            placement="bottomRight"
+          >
             <div
               style={{
                 display: 'flex',
@@ -145,7 +177,9 @@ const AppLayout = () => {
                 }}
                 icon={<UserOutlined />}
               />
-              <Text style={{ marginLeft: 8, fontSize: 13 }}>用户</Text>
+              <Text style={{ marginLeft: 8, fontSize: 13 }}>
+                {user?.nickname || user?.username || '用户'}
+              </Text>
             </div>
           </Dropdown>
         </div>
