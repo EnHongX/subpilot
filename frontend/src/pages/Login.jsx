@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Form, Input, Button, Card, Typography, message, Alert } from 'antd';
-import { UserOutlined, LockOutlined, LockFilled } from '@ant-design/icons';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 
 const { Title, Text } = Typography;
@@ -21,6 +21,8 @@ const Login = () => {
       if (result.success) {
         message.success('登录成功');
         navigate('/');
+      } else {
+        setError(result.error || '登录失败');
       }
     } catch (err) {
       const errorMsg = err.response?.data?.error || '登录失败，请稍后重试';

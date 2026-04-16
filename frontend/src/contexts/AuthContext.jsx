@@ -35,21 +35,31 @@ export const AuthProvider = ({ children }) => {
   }, [checkAuth]);
 
   const login = async (username, password) => {
-    const response = await authAPI.login(username, password);
-    if (response.data.success) {
-      setUser(response.data.data);
-      return { success: true };
+    try {
+      const response = await authAPI.login(username, password);
+      if (response.data.success) {
+        setUser(response.data.data);
+        return { success: true };
+      }
+      return { success: false, error: response.data.error || '登录失败' };
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || '登录失败，请稍后重试';
+      return { success: false, error: errorMsg };
     }
-    return { success: false, error: response.data.error };
   };
 
   const register = async (username, password) => {
-    const response = await authAPI.register(username, password);
-    if (response.data.success) {
-      setUser(response.data.data);
-      return { success: true };
+    try {
+      const response = await authAPI.register(username, password);
+      if (response.data.success) {
+        setUser(response.data.data);
+        return { success: true };
+      }
+      return { success: false, error: response.data.error || '注册失败' };
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || '注册失败，请稍后重试';
+      return { success: false, error: errorMsg };
     }
-    return { success: false, error: response.data.error };
   };
 
   const logout = async () => {
