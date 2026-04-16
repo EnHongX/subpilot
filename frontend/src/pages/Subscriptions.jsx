@@ -406,7 +406,7 @@ const Subscriptions = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 320,
+      width: 450,
       align: 'center',
       render: (_, record) => {
         const isActive = record.status === 'active';
@@ -414,7 +414,7 @@ const Subscriptions = () => {
         const isCancelled = record.status === 'cancelled';
 
         return (
-          <Space size="small" wrap>
+          <Space size="small">
             {isActive && (
               <Button
                 type="link"
@@ -643,7 +643,7 @@ const Subscriptions = () => {
               showSizeChanger: true,
               showQuickJumper: true,
             }}
-            scroll={{ x: 1300 }}
+            scroll={{ x: 1400 }}
           />
         </Card>
       )}
