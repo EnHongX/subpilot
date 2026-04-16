@@ -37,7 +37,6 @@ const ProtectedRoute = ({ children }) => {
 
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  const location = useLocation();
 
   if (loading) {
     return (
@@ -54,8 +53,7 @@ const PublicRoute = ({ children }) => {
   }
 
   if (user) {
-    const from = location.state?.from?.pathname || '/';
-    return <Navigate to={from} replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;

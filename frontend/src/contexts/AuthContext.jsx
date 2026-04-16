@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -15,24 +15,24 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const checkAuth = useCallback(async () => {
-    try {
-      const response = await authAPI.getCurrentUser();
-      if (response.data.success) {
-        setUser(response.data.data);
-      } else {
-        setUser(null);
-      }
-    } catch (error) {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await authAPI.getCurrentUser();
+        if (response.data.success) {
+          setUser(response.data.data);
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     checkAuth();
-  }, [checkAuth]);
+  }, []);
 
   const login = async (username, password) => {
     try {
@@ -81,7 +81,6 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
-    checkAuth,
     updateUserInfo,
   };
 
