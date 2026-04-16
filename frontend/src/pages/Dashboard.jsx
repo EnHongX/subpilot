@@ -84,6 +84,32 @@ const Dashboard = () => {
     return `${days} 天后`;
   };
 
+  const getCurrencyLabel = (currency) => {
+    const labels = {
+      CNY: '人民币',
+      USD: '美元',
+      EUR: '欧元',
+    };
+    return labels[currency] || currency;
+  };
+
+  const renderByCurrency = (byCurrency) => {
+    if (!byCurrency) return null;
+    const currencies = Object.entries(byCurrency).filter(([_, amount]) => amount > 0);
+    if (currencies.length === 0) return <Text type="secondary" style={{ fontSize: 12 }}>暂无支出</Text>;
+    
+    return (
+      <div style={{ marginTop: 4 }}>
+        {currencies.map(([currency, amount]) => (
+          <div key={currency} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 2 }}>
+            <Text type="secondary">{getCurrencyLabel(currency)}:</Text>
+            <Text strong>{formatCurrency(amount, currency)}</Text>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const statCards = [
     {
       title: '本月预计支出',
@@ -93,6 +119,7 @@ const Dashboard = () => {
       icon: <DollarOutlined />,
       color: '#1890ff',
       bgColor: '#e6f7ff',
+      byCurrency: monthlyExpenses?.byCurrency,
     },
     {
       title: '活跃订阅数',
@@ -110,6 +137,23 @@ const Dashboard = () => {
     },
   ];
 
+  const renderPaymentByCurrency = (byCurrency) => {
+    if (!byCurrency) return null;
+    const currencies = Object.entries(byCurrency).filter(([_, data]) => data.total > 0);
+    if (currencies.length === 0) return <Text type="secondary" style={{ fontSize: 12 }}>暂无记录</Text>;
+    
+    return (
+      <div style={{ marginTop: 4 }}>
+        {currencies.map(([currency, data]) => (
+          <div key={currency} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 2 }}>
+            <Text type="secondary">{getCurrencyLabel(currency)} ({data.count}项):</Text>
+            <Text strong>{formatCurrency(data.total, currency)}</Text>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const paymentStatCards = [
     {
       title: '本月已支付',
@@ -119,6 +163,7 @@ const Dashboard = () => {
       color: '#52c41a',
       bgColor: '#f6ffed',
       label: '已支付',
+      byCurrency: paymentStats?.paid?.byCurrency,
     },
     {
       title: '本月待支付',
@@ -128,6 +173,7 @@ const Dashboard = () => {
       color: '#fa8c16',
       bgColor: '#fff7e6',
       label: '待支付',
+      byCurrency: paymentStats?.pending?.byCurrency,
     },
   ];
 
@@ -230,6 +276,7 @@ const Dashboard = () => {
                       color: '#1f1f1f',
                     }}
                   />
+                  {card.byCurrency && renderByCurrency(card.byCurrency)}
                 </div>
               </div>
             </Card>
@@ -318,6 +365,7 @@ const Dashboard = () => {
                           >
                             {formatCurrency(card.total)}
                           </Text>
+                          {card.byCurrency && renderPaymentByCurrency(card.byCurrency)}
                         </div>
                       </Col>
                     </Row>

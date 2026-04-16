@@ -148,7 +148,11 @@ const getMonthlyExpenses = () => {
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
 
-  let totalMonthly = 0;
+  const currencyTotals = {
+    CNY: 0,
+    USD: 0,
+    EUR: 0
+  };
 
   subscriptions.forEach(sub => {
     let monthlyAmount = 0;
@@ -166,12 +170,22 @@ const getMonthlyExpenses = () => {
         monthlyAmount = sub.amount / 12;
         break;
     }
-    totalMonthly += monthlyAmount;
+    const currency = sub.currency || 'CNY';
+    if (currencyTotals.hasOwnProperty(currency)) {
+      currencyTotals[currency] += monthlyAmount;
+    } else {
+      currencyTotals.CNY += monthlyAmount;
+    }
   });
 
   return {
-    total: Math.round(totalMonthly * 100) / 100,
-    count: subscriptions.length
+    total: Math.round((currencyTotals.CNY + currencyTotals.USD + currencyTotals.EUR) * 100) / 100,
+    count: subscriptions.length,
+    byCurrency: {
+      CNY: Math.round(currencyTotals.CNY * 100) / 100,
+      USD: Math.round(currencyTotals.USD * 100) / 100,
+      EUR: Math.round(currencyTotals.EUR * 100) / 100
+    }
   };
 };
 
@@ -352,7 +366,22 @@ const getMonthlyPaymentStats = () => {
     WHERE payment_date >= ? AND payment_date <= ?
   `).all(monthStartStr, monthEndStr);
 
-  const paidTotal = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+  const paidByCurrency = {
+    CNY: { total: 0, count: 0 },
+    USD: { total: 0, count: 0 },
+    EUR: { total: 0, count: 0 }
+  };
+
+  paidPayments.forEach(p => {
+    const currency = p.currency || 'CNY';
+    if (paidByCurrency.hasOwnProperty(currency)) {
+      paidByCurrency[currency].total += p.amount;
+      paidByCurrency[currency].count += 1;
+    } else {
+      paidByCurrency.CNY.total += p.amount;
+      paidByCurrency.CNY.count += 1;
+    }
+  });
 
   const allSubscriptions = getAllSubscriptions();
   today.setHours(0, 0, 0, 0);
@@ -363,18 +392,43 @@ const getMonthlyPaymentStats = () => {
     return nextCharge >= today && nextCharge <= monthEnd;
   });
 
-  const pendingTotal = pendingSubscriptions.reduce((sum, sub) => sum + sub.amount, 0);
+  const pendingByCurrency = {
+    CNY: { total: 0, count: 0 },
+    USD: { total: 0, count: 0 },
+    EUR: { total: 0, count: 0 }
+  };
+
+  pendingSubscriptions.forEach(sub => {
+    const currency = sub.currency || 'CNY';
+    if (pendingByCurrency.hasOwnProperty(currency)) {
+      pendingByCurrency[currency].total += sub.amount;
+      pendingByCurrency[currency].count += 1;
+    } else {
+      pendingByCurrency.CNY.total += sub.amount;
+      pendingByCurrency.CNY.count += 1;
+    }
+  });
 
   return {
     paid: {
       count: paidPayments.length,
-      total: Math.round(paidTotal * 100) / 100,
-      payments: paidPayments
+      total: Math.round(paidPayments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100,
+      payments: paidPayments,
+      byCurrency: {
+        CNY: { total: Math.round(paidByCurrency.CNY.total * 100) / 100, count: paidByCurrency.CNY.count },
+        USD: { total: Math.round(paidByCurrency.USD.total * 100) / 100, count: paidByCurrency.USD.count },
+        EUR: { total: Math.round(paidByCurrency.EUR.total * 100) / 100, count: paidByCurrency.EUR.count }
+      }
     },
     pending: {
       count: pendingSubscriptions.length,
-      total: Math.round(pendingTotal * 100) / 100,
-      subscriptions: pendingSubscriptions
+      total: Math.round(pendingSubscriptions.reduce((sum, sub) => sum + sub.amount, 0) * 100) / 100,
+      subscriptions: pendingSubscriptions,
+      byCurrency: {
+        CNY: { total: Math.round(pendingByCurrency.CNY.total * 100) / 100, count: pendingByCurrency.CNY.count },
+        USD: { total: Math.round(pendingByCurrency.USD.total * 100) / 100, count: pendingByCurrency.USD.count },
+        EUR: { total: Math.round(pendingByCurrency.EUR.total * 100) / 100, count: pendingByCurrency.EUR.count }
+      }
     },
     month: {
       year: currentYear,
