@@ -86,7 +86,7 @@ const AppLayout = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Header
         style={{
-          padding: '0 24px',
+          padding: '0 32px',
           background: '#fff',
           display: 'flex',
           alignItems: 'center',
