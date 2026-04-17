@@ -18,6 +18,7 @@ import {
   HistoryOutlined,
   ReloadOutlined,
   CalendarOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { paymentAPI } from '../services/api';
@@ -96,6 +97,96 @@ const PaymentHistory = () => {
       startDate: null,
       endDate: null,
     });
+  };
+
+  const escapeCSVField = (field) => {
+    if (field === null || field === undefined) {
+      return '';
+    }
+    const stringField = String(field);
+    if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+      return `"${stringField.replace(/"/g, '""')}"`;
+    }
+    return stringField;
+  };
+
+  const exportToCSV = async () => {
+    try {
+      const allPayments = await fetchAllPayments();
+      
+      const headers = [
+        '订阅名称',
+        '支付周期',
+        '支付金额',
+        '货币',
+        '支付日期',
+        '下次扣费日期',
+        '支付时间',
+      ];
+
+      const rows = allPayments.map(payment => [
+        payment.subscription_name,
+        getCycleLabel(payment.cycle_type),
+        payment.amount,
+        payment.currency,
+        formatDate(payment.payment_date),
+        payment.next_charge_date ? formatDate(payment.next_charge_date) : '',
+        new Date(payment.created_at).toLocaleString('zh-CN'),
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(field => escapeCSVField(field)).join(','))
+      ].join('\n');
+
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().slice(0, 10);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `支付历史_${timestamp}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('导出CSV失败:', error);
+      setError(error.message || '导出失败');
+    }
+  };
+
+  const fetchAllPayments = async () => {
+    let allPayments = [];
+    let page = 1;
+    const limit = 100;
+    let hasMore = true;
+
+    while (hasMore) {
+      const params = { page, limit };
+      
+      if (filters.startDate) {
+        params.startDate = filters.startDate.format('YYYY-MM-DD');
+      }
+      if (filters.endDate) {
+        params.endDate = filters.endDate.format('YYYY-MM-DD');
+      }
+
+      const response = await paymentAPI.getHistory(params);
+      if (response.data.success) {
+        allPayments = [...allPayments, ...response.data.data.payments];
+        const pagination = response.data.data.pagination;
+        hasMore = page < pagination.totalPages;
+        page++;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allPayments;
   };
 
   const getCycleTagColor = (cycleType) => {
@@ -230,6 +321,15 @@ const PaymentHistory = () => {
           </Title>
           <Text type="secondary">查看所有订阅的支付记录</Text>
         </div>
+        <Button
+          type="primary"
+          icon={<DownloadOutlined />}
+          onClick={exportToCSV}
+          disabled={payments.length === 0}
+          size="large"
+        >
+          导出数据
+        </Button>
       </div>
 
       <Card
