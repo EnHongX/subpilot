@@ -46,6 +46,12 @@ const AppLayout = () => {
       onClick: () => navigate('/subscriptions'),
     },
     {
+      key: '/billing-calendar',
+      icon: <CalendarOutlined />,
+      label: '账单日历',
+      onClick: () => navigate('/billing-calendar'),
+    },
+    {
       key: '/payment-history',
       icon: <HistoryOutlined />,
       label: '支付历史',

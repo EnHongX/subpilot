@@ -6,6 +6,7 @@ import AppLayout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Subscriptions from './pages/Subscriptions';
 import PaymentHistory from './pages/PaymentHistory';
+import BillingCalendar from './pages/BillingCalendar';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Settings from './pages/Settings';
@@ -89,6 +90,7 @@ function AppContent() {
         <Route index element={<Dashboard />} />
         <Route path="subscriptions" element={<Subscriptions />} />
         <Route path="payment-history" element={<PaymentHistory />} />
+        <Route path="billing-calendar" element={<BillingCalendar />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
